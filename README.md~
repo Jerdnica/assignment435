@@ -5,4 +5,4 @@ Things to know about source file "assignment.c"
 * Compile it optionally with "gcc -g -o assignment assignment.c"
 * Run it with either -s or -c command.
 * -s argument means that the host computer will operate as a server.
-* -c argument means that the host computer will be a client. After starting, it will require the server computers IP address.  
+* -c argument means that the host computer will be a client. After starting, it will require the server computers IP address.
