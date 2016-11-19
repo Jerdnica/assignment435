@@ -1,0 +1,9 @@
+# Files to ignore:
+
+# Ignore all backups unless further specified.
+
+*.c~ 
+*.cpp~
+
+# All of the .swp ending vim files.
+*.swp
