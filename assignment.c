@@ -1,7 +1,13 @@
 /**
  *
  * Prototype application to establish data communications between a client and a server. 
- * TODO: calculate end-to-end delay and print it alongside the messages.
+ * TODO: - calculate end-to-end delay and print it alongside the messages.
+ *       - There is a problem when you send consecutive messages. The next message 
+ *       is written over the previous message when you send it.
+ *
+ *       Example: when you first send 'abcdefgh' and then send 'ijkl', 'ijklefgh' is sent
+ *       to the server.
+ *
  *
  */
 
@@ -17,14 +23,14 @@
 
 int main(int argc, char** argv)
 {
-    int servermode, clientmode, c;
+    int servermode, clientmode, ch;
     servermode = clientmode = 0;
     
     // Get the intended action whether it is acting as a server or a client
     while (--argc > 0 && (*++argv)[0] == '-')
     {
-        while (c = *++argv[0]) // First argument of the -argument
-            switch (c) {
+        while (ch = *++argv[0]) // First argument of the -argument
+            switch (ch) {
                 case 's':
 		    servermode = 1;
                     break;
@@ -33,11 +39,11 @@ int main(int argc, char** argv)
                     break;
                 default:
                     printf("Illegal option as argument: %c\n",
-                            c);
+                            ch);
                     argc = 0;
             }
     }
-    // If the host wants to act like a server
+    // If the host wants to act like a server and a client at the same time.
     if (servermode == 1 && clientmode == 1)
     {
 	fprintf(stderr, "You can't act as both a client and a server!\n");
@@ -122,10 +128,11 @@ int main(int argc, char** argv)
 	}
 	puts("Socket created");
 
-	// Change this IP address to the one desired. Or better, ask for it
+	// Connect to the IP address specified by the user
+	//
 	char* ipAddress = malloc(16 * sizeof(char)); // 15 for max + 1 for '\0'
-	
-	printf("Enter IP address: (Hint: its the first IP entry when you do 'sudo ifconfig' on the server");
+	printf("Enter IP address (Hint: its the first IP entry when you type 'sudo ifconfig' on the server)"\
+		"\nConnect to: ");
 	if (fgets(ipAddress, 16, stdin) == NULL)
 	{
 	    fprintf(stderr, "Failed to get IP address.");
