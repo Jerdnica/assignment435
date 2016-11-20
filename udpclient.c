@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
         error("ERROR opening socket");
 
     /* gethostbyname: get the server's DNS entry */
-    server = gethostbyname(hostname);
+    server = gethostbyaddr(hostname);
     if (server == NULL) {
         fprintf(stderr,"ERROR, no such host as %s\n", hostname);
         exit(0);

@@ -1,24 +1,21 @@
-/**
- *
- * Prototype application to establish data communications between a client and a server. 
- * TODO: - calculate end-to-end delay and print it alongside the messages.
- *       - There is a problem when you send consecutive messages. The next message 
- *       is written over the previous message when you send it.
- *
- *       Example: when you first send 'abcdefgh' and then send 'ijkl', 'ijklefgh' is sent
- *       to the server.
- *
- *
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 
 // Networking include files 
 #include <unistd.h> //read, write etc.
-#include<string.h>    //strlen
-#include<sys/socket.h>    //socket
-#include<arpa/inet.h> //inet_addr
+#include <string.h>    //strlen
+#include <netdb.h>
+#include <sys/socket.h>    //socket
+#include <arpa/inet.h> //inet_addr
+
+#define BUFSIZE 1024
+
+/* error() - a  wrapper for perror */
+void error(char *msg) {
+  perror(msg);
+  exit(1);
+}
+
 
 
 int main(int argc, char** argv)
@@ -51,136 +48,144 @@ int main(int argc, char** argv)
     }
     else if (servermode == 1) // Does server stuff instead.
     {
+	int sockfd; /* socket file descriptor*/
+	int portno = 8888; /* port to listen on, by default 8888 */
+	int clientlen; /* byte size of client's address */
+	struct sockaddr_in serveraddr; /* server's addr */
+	struct sockaddr_in clientaddr; /* client addr */
+	struct hostent *hostp; /* client host info */
+	char buf[BUFSIZE]; /* message buf */
+	char *hostaddrp; /* dotted decimal host addr string */
+	int optval; /* flag value for setsockopt */
+	int n; /* message byte size */
 
-    int socket_desc , client_sock , c , read_size;
-    struct sockaddr_in server , client;
-    char client_message[2000];
-     
-    //Create socket
-    socket_desc = socket(AF_INET , SOCK_STREAM , 0);
-    if (socket_desc == -1)
-    {
-        printf("Could not create socket");
-    }
-    puts("Socket created");
-     
-    //Prepare the sockaddr_in structure
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( 31313 );
-     
-    //Bind
-    if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0)
-    {
-        //print the error message
-        perror("bind failed. Error");
-        return 1;
-    }
-    puts("bind done");
-     
-    //Listen
-    listen(socket_desc , 3);
-     
-    //Accept and incoming connection
-    puts("Waiting for incoming connections...");
-    c = sizeof(struct sockaddr_in);
-     
-    //accept connection from an incoming client
-    client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c);
-    if (client_sock < 0)
-    {
-        perror("accept failed");
-        return 1;
-    }
-    puts("Connection accepted");
-     
-    //Receive a message from client
-    while( (read_size = recv(client_sock , client_message , 2000 , 0)) > 0 )
-    {
-        //Send the message back to client
-	printf("I received %s \n", client_message);
-        write(client_sock , client_message , strlen(client_message));
-    }
-     
-    if(read_size == 0)
-    {
-        puts("Client disconnected");
-        fflush(stdout);
-    }
-    else if(read_size == -1)
-    {
-        perror("recv failed");
-    }
-     
-    return 0;
+	/* socket: create the parent socket */
+	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (sockfd < 0) 
+	  error("ERROR opening socket");
+
+	/* setsockopt: Handy debugging trick that lets 
+	 * us rerun the server immediately after we kill it; 
+	 * otherwise we have to wait about 20 secs. 
+	 * Eliminates "ERROR on binding: Address already in use" error. 
+	 */
+	optval = 1;
+	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, 
+		   (const void *)&optval , sizeof(int));
+
+	/* * build the server's Internet address */
+	
+	bzero((char *) &serveraddr, sizeof(serveraddr));
+
+	/* Set server IP address properties */
+	serveraddr.sin_family = AF_INET;
+	serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	serveraddr.sin_port = htons((unsigned short)portno);
+
+	/* * bind: associate the parent socket with a port */
+	if (bind(sockfd, (struct sockaddr *) &serveraddr, 
+		 sizeof(serveraddr)) < 0) 
+	  error("ERROR on binding");
+
+	/* 
+	 * main loop: wait for a datagram, then echo it back
+	 */
+	clientlen = sizeof(clientaddr);
+	while (1) {
+	   /*
+	    * recvfrom: receive a UDP datagram from a client
+	    * Note: clientaddr is of type struct sockaddr_in, which 
+	    * can be safely typecasted into a struct sockaddr.
+	    */
+	   bzero(buf, BUFSIZE);
+	   n = recvfrom(sockfd, buf, BUFSIZE, 0,
+			 (struct sockaddr *) &clientaddr, &clientlen);
+	   if (n < 0)
+	       error("ERROR in recvfrom");
+
+	   /* * gethostbyaddr helps to  determine who sent the datagram */
+	   hostp = gethostbyaddr((const char *)&clientaddr.sin_addr.s_addr, 
+				  sizeof(clientaddr.sin_addr.s_addr), AF_INET);
+	   if (hostp == NULL)
+		error("ERROR on gethostbyaddr");
+	   hostaddrp = inet_ntoa(clientaddr.sin_addr);
+	      if (hostaddrp == NULL)
+		error("ERROR on inet_ntoa\n");
+	   printf("server received datagram from %s (%s)\n", 
+		     hostp->h_name, hostaddrp);
+	   printf("server received %d/%d bytes: %s\n", strlen(buf), n, buf);
+	      
+	   /* 
+	    * sendto: echo the input back to the client 
+	    */
+	   n = sendto(sockfd, buf, strlen(buf), 0, 
+			 (struct sockaddr *) &clientaddr, clientlen);
+	   if (n < 0) 
+		error("ERROR in sendto");
+       }
     }
     else if (clientmode == 1) // Do client stuff
     {
-	int sock;
-	struct sockaddr_in server;
-	char message[1000] , server_reply[2000];
+	int sockfd, n;
+	int serverlen;
+	struct sockaddr_in serveraddr;
+	struct hostent *server;
+	char *hostname;
+	char buf[BUFSIZE];
+	int portno = 8888; /* Set the default port to 8888 for testing */
 
-	//Create socket
-	sock = socket(AF_INET , SOCK_STREAM , 0);
-	if (sock == -1)
-	{
-	    printf("Could not create socket");
-	}
-	puts("Socket created");
 
-	// Connect to the IP address specified by the user
-	//
-	char* ipAddress = malloc(16 * sizeof(char)); // 15 for max + 1 for '\0'
-	printf("Enter IP address (Hint: its the first IP entry when you type 'sudo ifconfig' on the server)"\
-		"\nConnect to: ");
-	if (fgets(ipAddress, 16, stdin) == NULL)
-	{
-	    fprintf(stderr, "Failed to get IP address.");
-	    return 1;
+	/* socket: create the socket */
+	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (sockfd < 0) 
+	    error("ERROR opening socket");
+
+
+	/* Fill the hostname with the IP address supplied 
+	 * by the user of the program */
+
+	/* Maximum 15 characters (Think 255.255.255.255 as an example) + 1 for '\0' */
+	hostname = calloc(16, sizeof(char));
+	printf("Enter the IP address to send a message: ");
+	fgets(hostname, 16, stdin);
+
+	/* Remove trailing '\n' character from input and replace it with '\0' */
+	char *pos;
+	if ((pos=strchr(hostname, '\n')) != NULL)
+	    *pos = '\0';
+
+	/* gethostbyname: get the server's DNS entry */
+	server = gethostbyname(hostname);
+	if (server == NULL) {
+	    fprintf(stderr,"ERROR, no such host as %s\n", hostname);
+	    exit(0);
 	}
-	else
-	{
-	    printf("Setting socket ip address to: %s\n", ipAddress);
-	}
+
+	/* build the server's Internet address */
+	bzero((char *) &serveraddr, sizeof(serveraddr));
+	serveraddr.sin_family = AF_INET;
+	bcopy((char *)server->h_addr, 
+	      (char *)&serveraddr.sin_addr.s_addr, server->h_length);
+	serveraddr.sin_port = htons(portno);
+
+	/* get a message from the user */
+	bzero(buf, BUFSIZE);
+	printf("Please enter a message: ");
+	fgets(buf, BUFSIZE, stdin);
+
+	/* send the message to the server */
+	serverlen = sizeof(serveraddr);
+	n = sendto(sockfd, buf, strlen(buf), 0, &serveraddr, serverlen);
+	if (n < 0) 
+	  error("ERROR in sendto");
 	
-	server.sin_addr.s_addr = inet_addr(ipAddress);
-	server.sin_family = AF_INET;
-	server.sin_port = htons( 31313 );
+	/* print the server's reply */
+	n = recvfrom(sockfd, buf, strlen(buf), 0, &serveraddr, &serverlen);
 
-	//Connect to remote server
-	if (connect(sock , (struct sockaddr *)&server , sizeof(server)) < 0)
-	{
-	    perror("connect failed. Error");
-	    return 1;
-	}
+	if (n < 0) 
+	  error("ERROR in recvfrom");
 
-	puts("Connected\n");
-
-	//keep communicating with server
-	while(1)
-	{
-	    printf("Enter message : ");
-	    scanf("%s" , message);
-
-	    //Send some data
-	    if( send(sock , message , strlen(message) , 0) < 0)
-	    {
-		puts("Send failed");
-		return 1;
-	    }
-
-	    //Receive a reply from the server
-	    if( recv(sock , server_reply , 2000 , 0) < 0)
-	    {
-		puts("recv failed");
-		break;
-	    }
-
-	    puts("Server reply :");
-	    puts(server_reply);
-	}
-
-	close(sock);
+	printf("Echo from server: %s", buf);
 	return 0;
     }
     else // Invalid argument
